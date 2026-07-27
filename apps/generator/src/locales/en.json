@@ -1,0 +1,14 @@
+{
+  "app": {
+    "title": "Woodpecker pipeline configuration generator",
+    "tagline": "Build a .woodpecker.yaml, see what runs before you push."
+  },
+  "panel": {
+    "form": "Workflow",
+    "yaml": ".woodpecker.yaml",
+    "diagnostics": "Problems"
+  },
+  "scaffold": {
+    "notice": "Scaffold only. No pipeline logic is wired up yet."
+  }
+}

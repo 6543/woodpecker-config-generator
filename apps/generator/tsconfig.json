@@ -1,0 +1,22 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "types": ["vite/client"],
+    "jsx": "preserve",
+    "noEmit": false
+  },
+  "include": ["src/**/*.ts", "src/**/*.vue", "src/**/*.json", "vite.config.ts"],
+  "exclude": ["src/**/*.test.ts"],
+  "references": [
+    {
+      "path": "../../packages/core"
+    },
+    {
+      "path": "../../packages/pipeline-wasm"
+    },
+    {
+      "path": "../../packages/plugin-schema"
+    }
+  ]
+}

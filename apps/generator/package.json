@@ -1,0 +1,27 @@
+{
+  "name": "@woodpecker-ci/config-generator-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "vue-tsc -b",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@woodpecker-ci/config-core": "workspace:*",
+    "@woodpecker-ci/pipeline-wasm": "workspace:*",
+    "@woodpecker-ci/plugin-schema": "workspace:*",
+    "pinia": "^4.0.2",
+    "vue": "^3.5.40",
+    "vue-i18n": "^11.4.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.1.5"
+  }
+}
