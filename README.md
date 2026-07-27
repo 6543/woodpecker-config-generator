@@ -13,7 +13,9 @@ against the real engine. The YAML pane is still a textarea rather than
 CodeMirror, and plugin settings forms are not wired up.
 
 The Go side of the WASM module lives upstream, not here. `upstream-patches/`
-holds the two commits to apply to `woodpecker-ci/woodpecker`.
+holds the two commits to apply to `woodpecker-ci/woodpecker`, plus
+`DISCUSSION.md`, the draft post covering the plugin settings format and the
+remaining open questions.
 
 ## Layout
 

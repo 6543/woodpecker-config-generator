@@ -29,6 +29,8 @@ bytes.
 
 ## 3. Hosting: unresolved, blocked upstream
 
+Raised as question 4 in `upstream-patches/DISCUSSION.md`.
+
 Subpath on the Docusaurus site versus a separate artifact under the same domain.
 Needs upstream input before the deploy pipeline is written.
 
