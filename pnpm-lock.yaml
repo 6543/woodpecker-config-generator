@@ -96,7 +96,11 @@ importers:
 
   packages/pipeline-wasm: {}
 
-  packages/plugin-schema: {}
+  packages/plugin-schema:
+    dependencies:
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
 
 packages:
 
