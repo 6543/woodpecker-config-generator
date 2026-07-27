@@ -1,0 +1,27 @@
+{
+  "name": "@woodpecker-ci/config-core",
+  "version": "0.1.0",
+  "description": "Framework-neutral core: YAML AST operations, path-to-range resolution, prose generation, form model and shareable state codec.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --noEmit false --emitDeclarationOnly",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@woodpecker-ci/pipeline-wasm": "workspace:*",
+    "@woodpecker-ci/plugin-schema": "workspace:*",
+    "yaml": "^2.9.0"
+  }
+}
