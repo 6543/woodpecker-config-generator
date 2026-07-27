@@ -41,6 +41,13 @@ describe('importFromUrl, refusals', () => {
     'https://169.254.169.254/latest/meta-data',
     'https://[::1]/a.yaml',
     'https://box.local/a.yaml',
+    // IPv4-mapped IPv6. The URL parser leaves these as hextets rather than
+    // dotted IPv4, so a naive octet split never sees them: ::ffff:a9fe:a9fe is
+    // the cloud metadata endpoint 169.254.169.254, ::ffff:7f00:1 is loopback.
+    'https://[::ffff:a9fe:a9fe]/latest/meta-data',
+    'https://[::ffff:7f00:1]/a.yaml',
+    // Link-local fe80::/10.
+    'https://[fe80::1]/a.yaml',
   ])('refuses the private address %s', async (url) => {
     const result = await importFromUrl(url, { fetch: never });
     expect(result.ok).toBe(false);
@@ -51,6 +58,12 @@ describe('importFromUrl, refusals', () => {
   it('allows a public address that merely starts with private-looking digits', async () => {
     const fetch = ok(CONFIG);
     expect((await importFromUrl('https://172.32.0.1/a.yaml', { fetch })).ok).toBe(true);
+  });
+
+  it('allows a public domain that merely starts with fd or fc', async () => {
+    const fetch = ok(CONFIG);
+    expect((await importFromUrl('https://fdroid.example.com/a.yaml', { fetch })).ok).toBe(true);
+    expect((await importFromUrl('https://fc-cdn.example.org/a.yaml', { fetch })).ok).toBe(true);
   });
 });
 
