@@ -1,0 +1,25 @@
+{
+  "name": "@woodpecker-ci/plugin-schema",
+  "version": "0.1.0",
+  "description": "Parser for woodpecker-plugin-settings v1: machine-readable plugin settings tables in plugin docs.md files.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --noEmit false --emitDeclarationOnly",
+    "test": "vitest run --passWithNoTests"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
