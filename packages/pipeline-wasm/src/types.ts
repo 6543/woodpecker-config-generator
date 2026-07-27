@@ -58,6 +58,14 @@ export interface MatchResult {
 
 export type ExecutionMode = 'sequential' | 'dag';
 
+/**
+ * Stage resolution depends on the metadata.
+ *
+ * The compiler evaluates `when` while compiling, so a step the event excludes
+ * never reaches a stage. Passing empty metadata yields an empty graph rather
+ * than the "shape" of the workflow, which is why the metadata is required
+ * rather than optional.
+ */
 export interface StageResult {
   mode: ExecutionMode;
   /** Parallel groups, in execution order. */
@@ -68,7 +76,13 @@ export interface StageResult {
   error?: string;
 }
 
-/** One matrix axis combination, already expanded. */
+/**
+ * One matrix axis combination, already expanded.
+ *
+ * `match` and `stages` take one because substitution happens per job: the
+ * server builds one environment per combination, and `image: golang:${VERSION}`
+ * expands to a trailing colon without it, which is not valid YAML.
+ */
 export type Axis = Record<string, string>;
 
 /**
@@ -119,9 +133,9 @@ export interface VersionInfo {
 export interface Linter {
   parse(src: string): Promise<ParseResult>;
   lint(files: WorkflowFile[]): Promise<Diagnostic[]>;
-  match(src: string, metadata: Metadata): Promise<MatchResult>;
+  match(src: string, metadata: Metadata, axis?: Axis): Promise<MatchResult>;
   matrix(src: string): Promise<Axis[]>;
-  stages(src: string): Promise<StageResult>;
+  stages(src: string, metadata: Metadata, axis?: Axis): Promise<StageResult>;
   /** The embedded `schema.json`. Synchronous once the linter exists. */
   schema(): JSONSchema7;
   version(): VersionInfo;

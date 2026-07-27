@@ -1,4 +1,4 @@
-From 7cb07332d1ebd2bc93dca0852d5f549d3b82f1c3 Mon Sep 17 00:00:00 2001
+From 58949f4a683767abc7767af4c8f11f8969606ddf Mon Sep 17 00:00:00 2001
 From: claude <claude@anthropic.com>
 Date: Mon, 27 Jul 2026 09:47:45 +0000
 Subject: [PATCH 2/2] feat: add cmd/pipeline-wasm
@@ -13,32 +13,44 @@ what runs is worse than no tool.
 One JSON string in, one JSON string out. Traversing js.Value field by
 field is the main performance trap in Go WASM.
 
-Two constraints the implementation exists to satisfy:
+Four constraints the implementation exists to satisfy, each found by
+running real configs through it:
 
 - Logging is disabled, not redirected. A write to stderr from inside a
   synchronous js.Func deadlocks the module, because syscall.Write goes
   through an async fsCall that cannot complete while the callback is
   still on the stack. Metadata.Environ logs at trace level on the happy
   path, so this is reachable without any error occurring.
-- Lint dereferences the parsed workflow without a nil check, so parsing
-  must succeed before it is called. A config that fails to parse comes
-  back as a diagnostic instead.
+- match and stages substitute ${VAR} before parsing, as builder.go does.
+  Skipping it makes a when block filtering on ${CI_REPO_DEFAULT_BRANCH}
+  match nothing, which reads as a broken config rather than a missing
+  step.
+- Substitution takes a matrix axis. Without one, image: golang:${VERSION}
+  expands to a trailing colon and the config stops being valid YAML.
+- stages declares the secrets the config references. The compiler
+  resolves from_secret while compiling and fails on an unknown name, so
+  otherwise no config using a secret can be graphed in a browser. Names
+  suffice; a value cannot change the shape of the graph.
+
+Lint deliberately does not substitute: it takes no metadata, and
+expanding against an empty environment would blank values and invent
+errors.
 
 Nothing panics across the boundary: a panic escaping into JavaScript
 takes down the module, turning one malformed config into a dead editor.
 
 Built with GOOS=js GOARCH=wasm: 20.1 MB raw, 3.30 MB brotli.
 ---
- cmd/pipeline-wasm/main.go | 410 ++++++++++++++++++++++++++++++++++++++
- 1 file changed, 410 insertions(+)
+ cmd/pipeline-wasm/main.go | 489 ++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 489 insertions(+)
  create mode 100644 cmd/pipeline-wasm/main.go
 
 diff --git a/cmd/pipeline-wasm/main.go b/cmd/pipeline-wasm/main.go
 new file mode 100644
-index 0000000..5ef648b
+index 0000000..45d2d4d
 --- /dev/null
 +++ b/cmd/pipeline-wasm/main.go
-@@ -0,0 +1,410 @@
+@@ -0,0 +1,489 @@
 +// Copyright 2026 Woodpecker Authors
 +//
 +// Licensed under the Apache License, Version 2.0 (the "License");
@@ -143,6 +155,9 @@ index 0000000..5ef648b
 +type matchRequest struct {
 +	Source   string            `json:"src"`
 +	Metadata metadata.Metadata `json:"metadata"`
++	// One expanded matrix combination. Substitution happens against the
++	// metadata environment plus this axis, exactly as the server does per job.
++	Axis map[string]string `json:"axis"`
 +}
 +
 +type matchResult struct {
@@ -158,6 +173,7 @@ index 0000000..5ef648b
 +type stagesRequest struct {
 +	Source   string            `json:"src"`
 +	Metadata metadata.Metadata `json:"metadata"`
++	Axis     map[string]string `json:"axis"`
 +}
 +
 +type stagesResult struct {
@@ -171,6 +187,68 @@ index 0000000..5ef648b
 +
 +type versionResult struct {
 +	Woodpecker string `json:"woodpecker"`
++}
++
++// substitute expands ${VAR} against the metadata environment.
++//
++// The server does this before parsing, so a simulator that skips it disagrees
++// with the server about configs that use variables. A `when` block filtering on
++// ${CI_REPO_DEFAULT_BRANCH} matches nothing without it, which looks like a
++// broken config rather than a missing step.
++//
++// Lint deliberately does not substitute: it takes no metadata, and expanding
++// against an empty environment would blank out values and invent errors.
++func substitute(src string, md metadata.Metadata, axis map[string]string) (string, error) {
++	environ := md.Environ()
++	// Matrix values win, the same way the server builds one environment per job.
++	// Without them, `image: golang:${GO_VERSION}` expands to a trailing colon
++	// and the config stops being valid YAML at all.
++	for key, value := range axis {
++		environ[key] = value
++	}
++	return metadata.EnvVarSubst(src, environ)
++}
++
++// declaredSecrets collects every `from_secret` name in the config.
++//
++// The compiler resolves secrets while compiling and fails on an unknown one, so
++// stage resolution would be impossible in a browser, which has no secret
++// values. Names are enough: a value cannot change the shape of the graph.
++func declaredSecrets(workflow *yaml_types.Workflow) []compiler.Secret {
++	seen := map[string]struct{}{}
++	secrets := []compiler.Secret{}
++
++	var walk func(value any)
++	walk = func(value any) {
++		switch typed := value.(type) {
++		case map[string]any:
++			for key, nested := range typed {
++				if key == "from_secret" {
++					if name, ok := nested.(string); ok {
++						if _, exists := seen[name]; !exists {
++							seen[name] = struct{}{}
++							secrets = append(secrets, compiler.Secret{Name: name, Value: ""})
++						}
++					}
++					continue
++				}
++				walk(nested)
++			}
++		case []any:
++			for _, nested := range typed {
++				walk(nested)
++			}
++		}
++	}
++
++	for _, list := range []yaml_types.ContainerList{workflow.Steps, workflow.Services, workflow.Clone} {
++		for _, container := range list.ContainerList {
++			walk(map[string]any(container.Environment))
++			walk(map[string]any(container.Settings))
++		}
++	}
++
++	return secrets
 +}
 +
 +func parseWorkflow(src string) (*yaml_types.Workflow, error) {
@@ -272,7 +350,12 @@ index 0000000..5ef648b
 +		return nil, err
 +	}
 +
-+	workflow, err := parseWorkflow(req.Source)
++	source, err := substitute(req.Source, req.Metadata, req.Axis)
++	if err != nil {
++		return matchResult{Steps: map[string]bool{}, Effective: map[string]bool{}, Error: err.Error()}, nil
++	}
++
++	workflow, err := parseWorkflow(source)
 +	if err != nil {
 +		return matchResult{Steps: map[string]bool{}, Effective: map[string]bool{}, Error: err.Error()}, nil
 +	}
@@ -341,7 +424,12 @@ index 0000000..5ef648b
 +		return nil, err
 +	}
 +
-+	workflow, err := parseWorkflow(req.Source)
++	source, err := substitute(req.Source, req.Metadata, req.Axis)
++	if err != nil {
++		return stagesResult{Mode: "sequential", Stages: [][]string{}, Injected: []string{}, Error: err.Error()}, nil
++	}
++
++	workflow, err := parseWorkflow(source)
 +	if err != nil {
 +		return stagesResult{Mode: "sequential", Stages: [][]string{}, Injected: []string{}, Error: err.Error()}, nil
 +	}
@@ -351,7 +439,10 @@ index 0000000..5ef648b
 +		mode = "dag"
 +	}
 +
-+	config, err := compiler.New(compiler.WithMetadata(req.Metadata)).Compile(workflow)
++	config, err := compiler.New(
++		compiler.WithMetadata(req.Metadata),
++		compiler.WithSecret(declaredSecrets(workflow)...),
++	).Compile(workflow)
 +	if err != nil {
 +		return stagesResult{Mode: mode, Stages: [][]string{}, Injected: []string{}, Error: err.Error()}, nil
 +	}

@@ -61,8 +61,19 @@ export const UPSTREAM_DEFAULTS = {
   trustedClonePlugins: ['docker.io/woodpeckerci/plugin-git:2.9.2'],
 } as const;
 
+/**
+ * Assembled rather than written as a literal on purpose.
+ *
+ * Bundlers statically analyse `new URL('./literal', import.meta.url)` and emit
+ * the target as an asset. For a 21 MB artifact that means every consumer ships
+ * a hashed copy whether or not they point at their own, which is how the
+ * generator ended up emitting it twice. Callers that want the bundler to manage
+ * the asset should pass their own `wasmUrl`.
+ */
+const ARTIFACT = ['.', 'woodpecker.wasm'].join('/');
+
 function defaultWasmUrl(): string {
-  return new URL('./woodpecker.wasm', import.meta.url).href;
+  return new URL(ARTIFACT, import.meta.url).href;
 }
 
 async function loadWasm(url: string): Promise<BufferSource> {
@@ -146,9 +157,11 @@ export async function createLinterOver(
   return {
     parse: (src) => call<ParseResult>('parse', src),
     lint: (files: WorkflowFile[]) => call<Diagnostic[]>('lint', { files, ...lintOptions }),
-    match: (src, metadata: Metadata) => call<MatchResult>('match', { src, metadata }),
+    match: (src, metadata: Metadata, axis: Axis = {}) =>
+      call<MatchResult>('match', { src, metadata, axis }),
     matrix: (src) => call<Axis[]>('matrix', src),
-    stages: (src) => call<StageResult>('stages', { src, metadata: {} }),
+    stages: (src, metadata: Metadata, axis: Axis = {}) =>
+      call<StageResult>('stages', { src, metadata, axis }),
     schema: () => schema,
     version: () => ({ woodpecker: version.woodpecker, pkg: PKG_VERSION }),
     dispose: () => transport.release(),

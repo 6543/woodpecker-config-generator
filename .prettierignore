@@ -2,3 +2,4 @@ pnpm-lock.yaml
 dist/
 coverage/
 LICENSE
+apps/generator/public/wasm-exec.js

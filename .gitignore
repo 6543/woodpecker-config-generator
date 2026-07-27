@@ -7,3 +7,6 @@ coverage/
 # built WASM artifact, produced from an upstream checkout, never committed
 packages/pipeline-wasm/dist/*.wasm
 packages/pipeline-wasm/vendor/
+# WASM artifact copied in for the dev server, produced by build:wasm
+apps/generator/public/woodpecker.wasm
+apps/generator/public/wasm-exec.js

@@ -162,7 +162,10 @@ describe.skipIf(!available)('pipeline-wasm', () => {
       `  ${name}:\n    image: alpine\n${dependsOn === undefined ? '' : `    depends_on: ${dependsOn}\n`}`;
 
     it('runs steps one after another without depends_on', async () => {
-      const result = await wp.stages(`steps:\n${step('a')}${step('b')}${step('c')}`);
+      const result = await wp.stages(
+        `steps:\n${step('a')}${step('b')}${step('c')}`,
+        metadata('push'),
+      );
       expect(result.mode).toBe('sequential');
       expect(result.stages).toEqual([['clone'], ['a'], ['b'], ['c']]);
     });
@@ -170,18 +173,22 @@ describe.skipIf(!available)('pipeline-wasm', () => {
     it('treats an empty depends_on as DAG mode for the whole workflow', async () => {
       const result = await wp.stages(
         `steps:\n${step('a', '[]')}${step('b', '[]')}${step('c', '[a, b]')}`,
+        metadata('push'),
       );
       expect(result.mode).toBe('dag');
       expect(result.stages).toEqual([['clone'], ['a', 'b'], ['c']]);
     });
 
     it('marks the implicit clone as injected, not authored', async () => {
-      const result = await wp.stages(`steps:\n${step('a')}`);
+      const result = await wp.stages(`steps:\n${step('a')}`, metadata('push'));
       expect(result.injected).toEqual(['clone']);
     });
 
     it('reports a cycle with the path rather than hanging', async () => {
-      const result = await wp.stages(`steps:\n${step('a', '[b]')}${step('b', '[a]')}`);
+      const result = await wp.stages(
+        `steps:\n${step('a', '[b]')}${step('b', '[a]')}`,
+        metadata('push'),
+      );
       expect(result.error).toContain('cycle detected');
     });
   });

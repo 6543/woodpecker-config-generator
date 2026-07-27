@@ -1,45 +1,51 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n';
+import { decodeState } from '@woodpecker-ci/config-core';
+import type { Diagnostic } from '@woodpecker-ci/pipeline-wasm';
+import { onMounted, ref } from 'vue';
+import DiagnosticsBar from './components/DiagnosticsBar.vue';
+import EditorPane from './components/EditorPane.vue';
+import SimulateBar from './components/SimulateBar.vue';
+import TemplatePicker from './components/TemplatePicker.vue';
+import WorkflowPanel from './components/WorkflowPanel.vue';
+import type { Template } from './data/templates';
 import { useConfigStore } from './stores/config';
 
-const { t } = useI18n();
 const config = useConfigStore();
+const editor = ref<InstanceType<typeof EditorPane> | null>(null);
+
+onMounted(() => {
+  // A shared link skips the template picker. A bad one must open the picker
+  // rather than break the app, which is why decodeState returns null.
+  const shared = decodeState(location.hash);
+  const first = shared ? Object.entries(shared.files)[0] : undefined;
+  if (first) {
+    config.filename = first[0];
+    config.start(first[1]);
+  }
+});
+
+function pick(template: Template) {
+  config.start(template.source);
+}
+
+function reveal(diagnostic: Diagnostic) {
+  editor.value?.reveal(config.rangeFor(diagnostic));
+}
 </script>
 
 <template>
-  <div class="flex h-screen flex-col bg-white text-slate-900">
-    <header class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-      <h1 class="text-sm font-semibold">{{ t('app.title') }}</h1>
-      <p class="text-xs text-slate-500">{{ t('app.tagline') }}</p>
-    </header>
+  <TemplatePicker v-if="!config.started" @pick="pick" />
 
-    <!-- Split view, both panes always visible. Showing the generated YAML at
-         all times is a teaching choice: the tool should make itself
-         unnecessary (spec 6.1). -->
-    <main class="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-2">
-      <section class="min-h-0 overflow-auto border-slate-200 p-4 md:border-r">
-        <h2 class="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">
-          {{ t('panel.form') }}
-        </h2>
-        <p class="text-sm text-slate-500">{{ t('scaffold.notice') }}</p>
-      </section>
+  <div v-else class="flex h-screen flex-col bg-white text-slate-900">
+    <SimulateBar />
 
-      <section class="flex min-h-0 flex-col p-4">
-        <h2 class="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">
-          {{ t('panel.yaml') }}
-        </h2>
-        <!-- Placeholder for the CodeMirror 6 pane. The editor is real, not a
-             read-only preview: edits flow back into the AST. -->
-        <textarea
-          v-model="config.source"
-          class="min-h-0 flex-1 resize-none rounded border border-slate-200 p-2 font-mono text-sm"
-          spellcheck="false"
-        ></textarea>
-      </section>
+    <!-- Both panes stay visible. Showing the YAML at all times is a teaching
+         choice: the tool should make itself unnecessary. -->
+    <main class="grid min-h-0 flex-1 grid-cols-1 divide-slate-200 md:grid-cols-2 md:divide-x">
+      <WorkflowPanel />
+      <EditorPane ref="editor" />
     </main>
 
-    <footer class="border-t border-slate-200 px-4 py-2 text-xs text-slate-500">
-      {{ t('panel.diagnostics') }}
-    </footer>
+    <DiagnosticsBar @reveal="reveal" />
   </div>
 </template>
