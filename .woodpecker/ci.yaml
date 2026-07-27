@@ -1,0 +1,29 @@
+when:
+  - event: push
+  - event: pull_request
+
+variables:
+  - &node_image 'docker.io/library/node:22-alpine'
+
+steps:
+  install:
+    image: *node_image
+    commands:
+      - corepack enable
+      - pnpm install --frozen-lockfile
+
+  check:
+    image: *node_image
+    depends_on:
+      - install
+    commands:
+      - corepack enable
+      - pnpm check
+
+  build:
+    image: *node_image
+    depends_on:
+      - install
+    commands:
+      - corepack enable
+      - pnpm build
