@@ -3,10 +3,9 @@
 Framework-neutral core for the configuration generator. No Vue, no React, no
 bundler assumptions, so it can move into Woodpecker's own `web/src` unchanged.
 
-Implemented: the YAML AST layer, path-to-range resolution, the setup checklist
-and the shareable state codec. Prose generation stays stubbed until the WASM
-matcher exists to cross-check it against; a sentence that contradicts the
-matcher is worse than no sentence.
+Everything the design calls for is implemented: the YAML AST layer,
+path-to-range resolution, the prose generator, the setup checklist and the
+shareable state codec.
 
 ## The AST is the model
 
@@ -62,6 +61,48 @@ Those blocks do not map to a form. The UI marks them read-only and points at the
 text pane while the AST preserves them byte for byte. Rewriting a merge key
 would be a correctness bug: Woodpecker parses with a dialect that supports
 sequence merge keys, and the `yaml` npm package does not.
+
+## Prose
+
+```ts
+describeWhen({ event: 'tag' }, { level: 'step', workflowWhen: { event: 'push', branch: 'main' } });
+// "Runs on tags. The workflow filter also applies: it runs on pushes on branch `main`."
+```
+
+Deterministic TypeScript, never a model. Sentences render from `analyzeWhen`,
+which turns a `when` block into structured facts, so every claim a sentence
+makes is also available as data and can be checked against the real engine.
+
+Qualifiers the matcher applies silently are stated, because they are the whole
+reason the feature exists:
+
+- `Runs on tags on branch `main`, which has no effect because branch filters are
+skipped for tag events.`
+- `Runs on deployments touching `docs/**`, which has no effect because path
+filters apply only to push and pull request events.`
+- `Runs on any event for matrix `GO=1.26`, which has no effect because matrix
+filters are step-level only.`
+
+The qualifier appears only when some admitted event ignores the filter. Adding
+it to a push-only clause is noise that trains people to skim.
+
+`evaluate:` is rendered raw in backticks. Paraphrasing an expression is where
+prose starts lying.
+
+Step-level `when` never merges the workflow gate into one sentence: the two are
+evaluated independently upstream, and a step whose own filter matches still does
+not run when the workflow filter excludes the event.
+
+### Cross-check
+
+`prose.test.ts` runs twelve `when` blocks through the real WASM matcher across
+all nine webhook events and asserts the events a sentence claims are exactly the
+events the engine admits. It skips where the artifact is absent, so build it
+before trusting a green run:
+
+```sh
+WOODPECKER_SRC=/path/to/woodpecker pnpm --filter @woodpecker-ci/pipeline-wasm build:wasm
+```
 
 ## Setup checklist
 
