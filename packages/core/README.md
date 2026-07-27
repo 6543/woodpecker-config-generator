@@ -3,9 +3,10 @@
 Framework-neutral core for the configuration generator. No Vue, no React, no
 bundler assumptions, so it can move into Woodpecker's own `web/src` unchanged.
 
-Implemented: the YAML AST layer and path-to-range resolution. Prose generation,
-the setup checklist and the shareable state codec are still stubs, and prose in
-particular stays stubbed until the WASM matcher exists to cross-check it against.
+Implemented: the YAML AST layer, path-to-range resolution, the setup checklist
+and the shareable state codec. Prose generation stays stubbed until the WASM
+matcher exists to cross-check it against; a sentence that contradicts the
+matcher is worse than no sentence.
 
 ## The AST is the model
 
@@ -61,6 +62,30 @@ Those blocks do not map to a form. The UI marks them read-only and points at the
 text pane while the AST preserves them byte for byte. Rewriting a merge key
 would be a correctness bug: Woodpecker parses with a dialect that supports
 sequence merge keys, and the `yaml` npm package does not.
+
+## Setup checklist
+
+```ts
+buildChecklist(doc, plugins); // plugins keyed by image, without tag or digest
+```
+
+Derived, never authored. Every `from_secret:` in a step becomes an item naming
+the steps that need it, and any required plugin setting left unset becomes
+another. The Hugo example in the corpus documents its two secrets only in a
+header comment, which is exactly the knowledge that disappears on copy-paste;
+the checklist recovers both from the config itself.
+
+## Shareable state
+
+```ts
+const fragment = encodeState({ files }); // no leading '#'
+const state = decodeState(location.hash); // null for anything unparseable
+```
+
+Deflate then base64url, behind a version prefix so a format change invalidates
+old links rather than misreading them. Synchronous on purpose: `CompressionStream`
+exists in both targets but is async, and an async codec would push a promise
+through every caller that only wants to update the address bar.
 
 ## Tests
 

@@ -22,6 +22,7 @@
   "dependencies": {
     "@woodpecker-ci/pipeline-wasm": "workspace:*",
     "@woodpecker-ci/plugin-schema": "workspace:*",
+    "fflate": "^0.8.3",
     "yaml": "^2.9.0"
   }
 }
