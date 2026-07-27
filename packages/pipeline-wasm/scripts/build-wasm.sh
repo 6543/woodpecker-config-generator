@@ -28,8 +28,14 @@ echo "go.mod declares go $GO_VERSION"
 
 ( cd "$SRC" && GOOS=js GOARCH=wasm go build -o "$OUT_DIR/woodpecker.wasm" ./cmd/pipeline-wasm )
 
-# wasm_exec.js ships with the toolchain and must match the compiler.
-cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" "$OUT_DIR/wasm_exec.js"
+# wasm_exec.js ships with the toolchain and must match the compiler exactly.
+# It is a classic script that assigns globalThis.Go from inside an IIFE, so a
+# one-line re-export turns it into an ES module without patching the body.
+{
+  cat "$(go env GOROOT)/lib/wasm/wasm_exec.js"
+  echo
+  echo "export const Go = globalThis.Go;"
+} > "$OUT_DIR/wasm-exec.js"
 
 HASH="$(sha256sum "$OUT_DIR/woodpecker.wasm" | cut -c1-6 | tr 'a-f' 'A-F')"
 mv "$OUT_DIR/woodpecker.wasm" "$OUT_DIR/woodpecker-$HASH.wasm"

@@ -22,6 +22,11 @@ which is a top-three feature.
 Splitting into two modules is a false economy: each Go WASM module carries its
 own ~2 MB runtime baseline, so two modules cost more than one.
 
+Measured on the built artifact: 20.06 MB raw, 4.61 MB gzip, 3.30 MB brotli.
+Close enough to the 3.27 MB estimate that the decision stands unchanged, and it
+confirms brotli is the number to quote: gzip is 1.3 MB worse for the same
+bytes.
+
 ## 3. Hosting: unresolved, blocked upstream
 
 Subpath on the Docusaurus site versus a separate artifact under the same domain.

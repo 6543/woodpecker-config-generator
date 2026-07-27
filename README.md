@@ -8,9 +8,12 @@ Monorepo for three deliverables described in the pre-RFC spec:
    tables (`woodpecker-plugin-settings v1`).
 3. A standalone webapp that builds a `.woodpecker.yaml` and shows what would run.
 
-**Status: partial.** `plugin-schema` and the AST half of `core` are implemented
-and tested. The WASM wrapper, the prose generator, the setup checklist, the state
-codec and the app are still stubs that throw `NotImplementedError`.
+**Status: partial.** `pipeline-wasm`, `plugin-schema` and `core` are implemented
+and tested against the real engine. The prose generator and the app are still
+outstanding.
+
+The Go side of the WASM module lives upstream, not here. `upstream-patches/`
+holds the two commits to apply to `woodpecker-ci/woodpecker`.
 
 ## Layout
 

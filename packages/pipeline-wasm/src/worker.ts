@@ -1,23 +1,53 @@
 /**
- * Worker body. Instantiates the WASM module and forwards one JSON payload per
- * call. Chatty `js.Value` traversal is the main Go WASM performance trap, so
- * the protocol is deliberately one request, one response (spec 4.3).
+ * Worker body. Instantiates the module once and forwards one JSON payload per
+ * call, so the main thread never blocks on a lint of a large config.
  */
-import { NotImplementedError } from './not-implemented.js';
+import { instantiate, type Method } from './runtime.js';
 
-export type WorkerRequest = {
+export interface WorkerRequest {
   id: number;
-  method: 'init' | 'parse' | 'lint' | 'match' | 'matrix' | 'stages' | 'schema' | 'version';
+  method: Method | 'init' | 'dispose';
   payload: string;
-};
+  wasmUrl?: string;
+}
 
-export type WorkerResponse = {
+export interface WorkerResponse {
   id: number;
-  /** JSON string, or undefined when `error` is set. */
+  /** JSON string, absent when `error` is set. */
   payload?: string;
   error?: string;
-};
+}
 
-export function handle(_req: WorkerRequest): Promise<WorkerResponse> {
-  throw new NotImplementedError('worker.handle');
+type Api = Awaited<ReturnType<typeof instantiate>>;
+
+let api: Api | null = null;
+
+async function handle(request: WorkerRequest): Promise<WorkerResponse> {
+  try {
+    if (request.method === 'init') {
+      api ??= await instantiate(request.wasmUrl);
+      return { id: request.id, payload: '{}' };
+    }
+
+    if (!api) throw new Error('worker used before init');
+
+    if (request.method === 'dispose') {
+      api.dispose();
+      api = null;
+      return { id: request.id, payload: '{}' };
+    }
+
+    return { id: request.id, payload: api[request.method](request.payload) };
+  } catch (error) {
+    return { id: request.id, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+// Guarded so the module can be imported for its types without a worker scope.
+if (typeof self !== 'undefined' && 'onmessage' in self) {
+  self.onmessage = (event: MessageEvent<WorkerRequest>) => {
+    void handle(event.data).then((response) => {
+      (self as unknown as { postMessage(value: WorkerResponse): void }).postMessage(response);
+    });
+  };
 }

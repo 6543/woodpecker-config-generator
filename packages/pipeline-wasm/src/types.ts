@@ -9,13 +9,13 @@
 export type Severity = 'error' | 'warning';
 
 /**
- * Which lint pass produced a diagnostic.
+ * Which pass produced a diagnostic.
  *
- * Upstream returns a flat error list. This classification is derived by the
- * wrapper and is best-effort (spec 4.2). It drives grouping in the UI only,
- * never correctness.
+ * These are upstream's own `PipelineErrorType` values, passed through verbatim
+ * rather than reclassified, so the wrapper cannot invent a category the server
+ * would not report. `generic` covers parse failures, which carry no field path.
  */
-export type DiagnosticSource = 'schema' | 'linter' | 'deprecation' | 'bad-habit' | 'trusted';
+export type DiagnosticSource = 'linter' | 'deprecation' | 'compiler' | 'generic' | 'bad_habit';
 
 export interface Diagnostic {
   message: string;

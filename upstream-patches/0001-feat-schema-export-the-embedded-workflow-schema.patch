@@ -1,0 +1,48 @@
+From 2dd145a3523046612886383a3e5d7f068f5b7a84 Mon Sep 17 00:00:00 2001
+From: claude <claude@anthropic.com>
+Date: Mon, 27 Jul 2026 09:47:45 +0000
+Subject: [PATCH 1/2] feat(schema): export the embedded workflow schema
+
+Editors and other frontends need the schema itself, not only the result
+of linting against it, so they can offer completion and hover docs.
+Without an accessor they would ship a second copy that drifts.
+---
+ .../frontend/yaml/linter/schema/definition.go | 26 +++++++++++++++++++
+ 1 file changed, 26 insertions(+)
+ create mode 100644 pipeline/frontend/yaml/linter/schema/definition.go
+
+diff --git a/pipeline/frontend/yaml/linter/schema/definition.go b/pipeline/frontend/yaml/linter/schema/definition.go
+new file mode 100644
+index 0000000..c6c4b84
+--- /dev/null
++++ b/pipeline/frontend/yaml/linter/schema/definition.go
+@@ -0,0 +1,26 @@
++// Copyright 2026 Woodpecker Authors
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//     http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++// See the License for the specific language governing permissions and
++// limitations under the License.
++
++package schema
++
++// Definition returns the embedded JSON schema for a workflow configuration.
++//
++// Editors and other frontends need the schema itself, not only the result of
++// linting against it, so that they can offer completion and hover
++// documentation without shipping a second copy that would drift.
++func Definition() []byte {
++	out := make([]byte, len(schemaDefinition))
++	copy(out, schemaDefinition)
++	return out
++}
+-- 
+2.43.0
+
