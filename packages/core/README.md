@@ -116,6 +116,25 @@ another. The Hugo example in the corpus documents its two secrets only in a
 header comment, which is exactly the knowledge that disappears on copy-paste;
 the checklist recovers both from the config itself.
 
+## Importing an existing config
+
+```ts
+const result = await importFromUrl('https://codeberg.org/o/r/raw/branch/main/.woodpecker.yaml');
+```
+
+Read-only, public-only, stateless. Refuses anything but https, refuses URLs
+carrying credentials, and refuses loopback, RFC1918, `.local`, `.internal` and
+169.254.169.254, which is the cloud metadata endpoint and the reason the list is
+not optional.
+
+Redirects are refused rather than followed. A browser cannot see where a
+redirect leads, so following one would make the address check meaningless.
+
+Size is capped both by the declared `content-length` and again after reading,
+because the header can lie. A cross-origin failure comes back as a message
+pointing at pasting instead: many forges do not send permissive CORS headers on
+raw endpoints, and that is not something the app can fix.
+
 ## Shareable state
 
 ```ts

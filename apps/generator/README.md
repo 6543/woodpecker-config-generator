@@ -35,8 +35,13 @@ file.
   gate excludes the event, one explanation replaces N per-step messages.
 - **Matrix preview**, one button per expanded job.
 - **Setup checklist** derived from the config rather than from comments.
+- **Import by URL** on the picker, for a config you already have. Refuses
+  anything but public https, sends no credentials, and refuses redirects.
 - **Share** compresses the config into the URL fragment, which never reaches a
   server.
+- **Version affordance** showing 3.x only. 1.x and 2.x differ materially
+  (`pipeline:` to `steps:`, `platform:` to `labels:`), and supporting them means
+  one artifact per version.
 
 ## Known gaps
 

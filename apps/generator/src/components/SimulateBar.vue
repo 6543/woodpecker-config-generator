@@ -58,7 +58,17 @@ function onFile(event: Event) {
       </button>
     </template>
 
-    <label class="ml-auto cursor-pointer text-xs text-slate-600 underline">
+    <label class="ml-auto text-xs text-slate-600">
+      Woodpecker
+      <select
+        class="ml-1 rounded border border-slate-300 bg-white px-2 py-1 text-xs"
+        title="Only the current major is supported. 1.x and 2.x differ materially."
+      >
+        <option>3.x</option>
+      </select>
+    </label>
+
+    <label class="cursor-pointer text-xs text-slate-600 underline">
       Import metadata.json
       <input type="file" accept="application/json,.json" class="sr-only" @change="onFile" />
     </label>

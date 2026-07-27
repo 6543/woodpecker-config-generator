@@ -28,13 +28,18 @@ function pick(template: Template) {
   config.start(template.source);
 }
 
+function load(payload: { filename: string; source: string }) {
+  config.filename = payload.filename;
+  config.start(payload.source);
+}
+
 function reveal(diagnostic: Diagnostic) {
   editor.value?.reveal(config.rangeFor(diagnostic));
 }
 </script>
 
 <template>
-  <TemplatePicker v-if="!config.started" @pick="pick" />
+  <TemplatePicker v-if="!config.started" @pick="pick" @load="load" />
 
   <div v-else class="flex h-screen flex-col bg-white text-slate-900">
     <SimulateBar />
