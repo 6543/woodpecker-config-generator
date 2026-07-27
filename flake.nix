@@ -37,7 +37,11 @@
               go
               pkgs.brotli
               pkgs.git
+              pkgs.cacert # TLS roots for `go` module fetches and the schema curl
             ];
+
+            # Keep the toolchain fixed to the pinned go; never download one.
+            env.GOTOOLCHAIN = "local";
 
             shellHook = ''
               echo "woodpecker-config-generator dev shell"
@@ -47,10 +51,11 @@
               echo "  pnpm dev            start the Vite dev server (apps/generator)"
               echo "  pnpm check          format:check + lint + typecheck + test"
               echo ""
-              echo "The WASM engine builds from a woodpecker checkout and is lazy-loaded"
-              echo "on first engine call, so the dev server runs without it:"
-              echo "  WOODPECKER_SRC=/path/to/woodpecker \\"
-              echo "    pnpm --filter @woodpecker-ci/pipeline-wasm build:wasm"
+              echo "The WASM engine builds from the in-repo Go module in"
+              echo "packages/pipeline-wasm/wasm (imports go.woodpecker-ci.org/woodpecker/v3),"
+              echo "so no upstream checkout is needed. It is lazy-loaded, so the dev server"
+              echo "runs without it:"
+              echo "  pnpm --filter @woodpecker-ci/pipeline-wasm build:wasm"
             '';
           };
       });

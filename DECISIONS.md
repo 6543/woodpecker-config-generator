@@ -36,13 +36,16 @@ Needs upstream input before the deploy pipeline is written.
 
 Until then `apps/generator` builds with `base: './'`, which works either way.
 
-## 4. WASM source location: in-tree upstream
+## 4. WASM source location: in-repo module importing `v3`
 
-The Go entry point lives in `woodpecker-ci/woodpecker` under
-`cmd/pipeline-wasm`, published by the existing release pipeline. Guaranteed in
-sync, at the cost of adding a JS release axis to the Go repo. A sibling repo
-would be cleaner separation but invites drift, and drift here means the browser
-disagreeing with the server about what runs.
+The Go entry point lives here, in `packages/pipeline-wasm/wasm/`, as its own
+module that imports `go.woodpecker-ci.org/woodpecker/v3` as an ordinary
+dependency. No upstream checkout, no patches: `wasm/go.mod` pins the engine
+version, so the browser and the server can only disagree when that pin is bumped
+deliberately. The schema is not embedded; `build:wasm` fetches it from
+`SCHEMA_URL` (default: `woodpecker-ci/woodpecker` `main`) and ships it beside the
+artifact. Upstreaming the entry point into the release pipeline stays an option
+later, but is no longer a prerequisite for building.
 
 Consequence for this repo: `packages/pipeline-wasm` holds only the JavaScript
 wrapper. `scripts/build-wasm.sh` builds the artifact from an upstream checkout,

@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "typecheck": "vue-tsc -b",
     "test": "vitest run --passWithNoTests",
-    "sync:wasm": "cp ../../packages/pipeline-wasm/dist/woodpecker.wasm ../../packages/pipeline-wasm/dist/wasm-exec.js public/"
+    "sync:wasm": "cp ../../packages/pipeline-wasm/dist/woodpecker.wasm ../../packages/pipeline-wasm/dist/wasm-exec.js ../../packages/pipeline-wasm/dist/schema.json public/"
   },
   "dependencies": {
     "@woodpecker-ci/config-core": "workspace:*",

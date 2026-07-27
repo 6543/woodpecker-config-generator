@@ -1,32 +1,34 @@
 #!/usr/bin/env bash
 # Build the Woodpecker pipeline frontend to WebAssembly.
 #
-# The Go source lives upstream in woodpecker-ci/woodpecker under
-# cmd/pipeline-wasm (spec 10.4). This script builds it from a checkout and
-# drops the artifact into dist/, content-hashed.
+# The Go entry point lives in ../wasm as its own module that imports
+# go.woodpecker-ci.org/woodpecker/v3 as an ordinary dependency, so there is no
+# upstream checkout to point at and no patches to apply: the pinned module in
+# wasm/go.mod is the single source of the engine version.
 #
-# Usage: WOODPECKER_SRC=/path/to/woodpecker ./scripts/build-wasm.sh
+# Usage: ./scripts/build-wasm.sh
+#   SCHEMA_URL=<url>   override where the workflow JSON schema is fetched from.
 set -euo pipefail
 
-SRC="${WOODPECKER_SRC:-}"
-OUT_DIR="$(cd "$(dirname "$0")/.." && pwd)/dist"
+PKG_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+OUT_DIR="$PKG_DIR/dist"
+WASM_SRC="$PKG_DIR/wasm"
 
-if [ -z "$SRC" ]; then
-  echo "WOODPECKER_SRC is unset. Point it at a woodpecker-ci/woodpecker checkout." >&2
-  exit 1
-fi
-if [ ! -d "$SRC/cmd/pipeline-wasm" ]; then
-  echo "$SRC/cmd/pipeline-wasm not found. The WASM entry point is not in this checkout." >&2
-  exit 1
-fi
+# The workflow JSON schema is not embedded in the wasm. It is fetched at build
+# time and shipped beside the artifact, so the runtime stays offline: the linter
+# emits its own diagnostics, and this copy only feeds editor completion/hover.
+SCHEMA_URL="${SCHEMA_URL:-https://raw.githubusercontent.com/woodpecker-ci/woodpecker/refs/heads/main/pipeline/frontend/yaml/linter/schema/schema.json}"
 
 mkdir -p "$OUT_DIR"
 
-# Use at least the Go version go.mod declares.
-GO_VERSION="$(awk '/^go /{print $2; exit}' "$SRC/go.mod")"
-echo "go.mod declares go $GO_VERSION"
+# Keep the toolchain fixed to the one on PATH (the flake pins go 1.26); never
+# let the go directive trigger a toolchain download mid-build.
+export GOTOOLCHAIN="${GOTOOLCHAIN:-local}"
 
-( cd "$SRC" && GOOS=js GOARCH=wasm go build -o "$OUT_DIR/woodpecker.wasm" ./cmd/pipeline-wasm )
+GO_VERSION="$(awk '/^go /{print $2; exit}' "$WASM_SRC/go.mod")"
+echo "wasm/go.mod declares go $GO_VERSION; building with $(go version | awk '{print $3}')"
+
+( cd "$WASM_SRC" && GOOS=js GOARCH=wasm go build -o "$OUT_DIR/woodpecker.wasm" . )
 
 # wasm_exec.js ships with the toolchain and must match the compiler exactly.
 # It is a classic script that assigns globalThis.Go from inside an IIFE, so a
@@ -36,6 +38,9 @@ echo "go.mod declares go $GO_VERSION"
   echo
   echo "export const Go = globalThis.Go;"
 } > "$OUT_DIR/wasm-exec.js"
+
+echo "fetching workflow schema from $SCHEMA_URL"
+curl -fsSL "$SCHEMA_URL" -o "$OUT_DIR/schema.json"
 
 HASH="$(sha256sum "$OUT_DIR/woodpecker.wasm" | cut -c1-6 | tr 'a-f' 'A-F')"
 mv "$OUT_DIR/woodpecker.wasm" "$OUT_DIR/woodpecker-$HASH.wasm"

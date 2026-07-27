@@ -101,7 +101,7 @@ events the engine admits. It skips where the artifact is absent, so build it
 before trusting a green run:
 
 ```sh
-WOODPECKER_SRC=/path/to/woodpecker pnpm --filter @woodpecker-ci/pipeline-wasm build:wasm
+pnpm --filter @woodpecker-ci/pipeline-wasm build:wasm
 ```
 
 ## Setup checklist

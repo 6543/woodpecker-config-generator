@@ -4,7 +4,13 @@
  * The WASM is fetched on first call and never at import, and it runs off the
  * main thread. A 3.3 MB module that blocked first paint would defeat the point.
  */
-import { createLinterOver, type Callable, type Method } from './runtime.js';
+import {
+  createLinterOver,
+  defaultSchemaUrl,
+  loadSchema,
+  type Callable,
+  type Method,
+} from './runtime.js';
 import type { Linter, LinterOptions } from './types.js';
 import type { WorkerRequest, WorkerResponse } from './worker.js';
 
@@ -49,6 +55,9 @@ function spawn(options: LinterOptions): Callable {
   };
 }
 
-export function createLinter(options: LinterOptions = {}): Promise<Linter> {
-  return createLinterOver(spawn(options), options);
+export async function createLinter(options: LinterOptions = {}): Promise<Linter> {
+  // The schema is a static asset fetched on the main thread, not a wasm call,
+  // so the worker never has to marshal it back across the boundary.
+  const schema = await loadSchema(options.schemaUrl ?? defaultSchemaUrl(options.wasmUrl));
+  return createLinterOver(spawn(options), options, schema);
 }

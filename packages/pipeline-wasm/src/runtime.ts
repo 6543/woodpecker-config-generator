@@ -19,7 +19,7 @@ import type {
 } from './types.js';
 
 /** The method names the Go module installs on globalThis. */
-export type Method = 'parse' | 'lint' | 'match' | 'matrix' | 'stages' | 'schema' | 'version';
+export type Method = 'parse' | 'lint' | 'match' | 'matrix' | 'stages' | 'version';
 
 interface GoApi extends Record<Method, (payload: string) => string> {
   dispose: () => void;
@@ -71,25 +71,55 @@ export const UPSTREAM_DEFAULTS = {
  * the asset should pass their own `wasmUrl`.
  */
 const ARTIFACT = ['.', 'woodpecker.wasm'].join('/');
+const SCHEMA = ['.', 'schema.json'].join('/');
 
 function defaultWasmUrl(): string {
   return new URL(ARTIFACT, import.meta.url).href;
 }
 
-async function loadWasm(url: string): Promise<BufferSource> {
+/**
+ * Where the workflow schema sits by default: beside the wasm artifact, since
+ * `build-wasm.sh` writes both into `dist`. The schema is not embedded in the
+ * module — it is fetched at build time and shipped as a static asset — so a
+ * consumer that relocates the wasm points `schemaUrl` at the matching copy.
+ */
+export function defaultSchemaUrl(wasmUrl?: string): string {
+  return wasmUrl ? new URL(SCHEMA, wasmUrl).href : new URL(SCHEMA, import.meta.url).href;
+}
+
+async function loadBytes(url: string): Promise<Uint8Array | ArrayBuffer> {
   const isNode = typeof process !== 'undefined' && process.versions?.node !== undefined;
 
   if (isNode && (url.startsWith('file:') || url.startsWith('/'))) {
     const { readFile } = await import('node:fs/promises');
     const { fileURLToPath } = await import('node:url');
     const path = url.startsWith('file:') ? fileURLToPath(url) : url;
-    const buffer = await readFile(path);
-    return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+    return readFile(path);
   }
 
   const response = await fetch(url);
   if (!response.ok) throw new Error(`failed to fetch ${url}: ${response.status}`);
   return response.arrayBuffer();
+}
+
+async function loadWasm(url: string): Promise<BufferSource> {
+  const bytes = await loadBytes(url);
+  if (bytes instanceof ArrayBuffer) return bytes;
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
+/**
+ * Fetch and parse the workflow JSON schema. Best-effort: a missing asset yields
+ * null so the engine still lints, and only `schema()` surfaces the absence.
+ */
+export async function loadSchema(url: string): Promise<JSONSchema7 | null> {
+  try {
+    const bytes = await loadBytes(url);
+    const text = new TextDecoder().decode(bytes);
+    return JSON.parse(text) as JSONSchema7;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -132,12 +162,14 @@ export interface Callable {
 }
 
 /**
- * Build the public Linter over any transport. `schema` and `version` are
- * fetched once during construction so they can stay synchronous.
+ * Build the public Linter over any transport. `version` is fetched once during
+ * construction so it can stay synchronous; the schema is supplied by the caller
+ * (loaded from the build-time asset) rather than crossing the wasm boundary.
  */
 export async function createLinterOver(
   transport: Callable,
   options: LinterOptions = {},
+  schema: JSONSchema7 | null = null,
 ): Promise<Linter> {
   const lintOptions = {
     trusted: { ...UPSTREAM_DEFAULTS.trusted, ...options.trusted },
@@ -145,7 +177,6 @@ export async function createLinterOver(
     trustedClonePlugins: options.trustedClonePlugins ?? [...UPSTREAM_DEFAULTS.trustedClonePlugins],
   };
 
-  const schema = unwrap<JSONSchema7>(await transport.call('schema', ''), 'schema');
   const version = unwrap<{ woodpecker: string }>(await transport.call('version', ''), 'version');
 
   const call = async <T>(method: Method, payload: unknown): Promise<T> =>
@@ -162,7 +193,12 @@ export async function createLinterOver(
     matrix: (src) => call<Axis[]>('matrix', src),
     stages: (src, metadata: Metadata, axis: Axis = {}) =>
       call<StageResult>('stages', { src, metadata, axis }),
-    schema: () => schema,
+    schema: () => {
+      if (!schema) {
+        throw new Error('schema unavailable: schema.json was not loaded (run build:wasm)');
+      }
+      return schema;
+    },
     version: () => ({ woodpecker: version.woodpecker, pkg: PKG_VERSION }),
     dispose: () => transport.release(),
   };

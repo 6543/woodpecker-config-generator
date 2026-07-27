@@ -5,18 +5,19 @@ state.
 
 ## Running it
 
-The engine artifact is not committed. Build it from an upstream checkout with
-the two patches in `upstream-patches/` applied, then copy it in:
+The engine artifact is not committed. Build it from the in-repo Go module, then
+copy it in:
 
 ```sh
-WOODPECKER_SRC=/path/to/woodpecker pnpm --filter @woodpecker-ci/pipeline-wasm build:wasm
+pnpm --filter @woodpecker-ci/pipeline-wasm build:wasm
 pnpm --filter @woodpecker-ci/config-generator-app sync:wasm
 pnpm dev
 ```
 
-`sync:wasm` copies `woodpecker.wasm` and `wasm-exec.js` into `public/`, so both
-keep stable names and the bundler does not emit a second hashed copy of a 21 MB
-file.
+`build:wasm` needs no upstream checkout: it compiles `packages/pipeline-wasm/wasm`,
+which imports `go.woodpecker-ci.org/woodpecker/v3`. `sync:wasm` copies
+`woodpecker.wasm`, `wasm-exec.js` and `schema.json` into `public/`, so they keep
+stable names and the bundler does not emit a second hashed copy of a 21 MB file.
 
 ## What it does
 

@@ -12,10 +12,12 @@ Monorepo for three deliverables described in the pre-RFC spec:
 against the real engine. The YAML pane is still a textarea rather than
 CodeMirror, and plugin settings forms are not wired up.
 
-The Go side of the WASM module lives upstream, not here. `upstream-patches/`
-holds the two commits to apply to `woodpecker-ci/woodpecker`, plus
-`DISCUSSION.md`, the draft post covering the plugin settings format and the
-remaining open questions.
+The Go side of the WASM module is an in-repo module under
+`packages/pipeline-wasm/wasm/` that imports `go.woodpecker-ci.org/woodpecker/v3`
+as an ordinary dependency, so there is no upstream checkout to point at and no
+patches to apply; `wasm/go.mod` pins the engine version. `upstream-patches/`
+keeps only `DISCUSSION.md`, the draft post covering the plugin settings format
+and the remaining open questions.
 
 ## Layout
 
@@ -34,8 +36,8 @@ own UI, `core` moves in unchanged.
 
 - Node 22 or newer
 - pnpm 11 (`corepack enable`)
-- Go, only for `pnpm --filter @woodpecker-ci/pipeline-wasm build:wasm`, and only
-  against a `woodpecker-ci/woodpecker` checkout
+- Go 1.26, only for `pnpm --filter @woodpecker-ci/pipeline-wasm build:wasm`,
+  which builds the in-repo `wasm/` module (no upstream checkout needed)
 
 ## Commands
 
@@ -46,11 +48,15 @@ pnpm dev          # generator app on Vite
 pnpm build        # packages, then the app
 ```
 
-The WASM artifact is not committed. Build it from an upstream checkout:
+The WASM artifact is not committed. Build it from the in-repo Go module:
 
 ```sh
-WOODPECKER_SRC=../woodpecker pnpm --filter @woodpecker-ci/pipeline-wasm build:wasm
+pnpm --filter @woodpecker-ci/pipeline-wasm build:wasm
 ```
+
+This also fetches the workflow JSON schema and writes `dist/schema.json` beside
+the artifact. Override the source with `SCHEMA_URL=<url>`; it defaults to the
+schema on `woodpecker-ci/woodpecker` `main`.
 
 ## Two invariants worth knowing before contributing
 

@@ -10,3 +10,4 @@ packages/pipeline-wasm/vendor/
 # WASM artifact copied in for the dev server, produced by build:wasm
 apps/generator/public/woodpecker.wasm
 apps/generator/public/wasm-exec.js
+apps/generator/public/schema.json

@@ -99,6 +99,11 @@ export interface TrustedConfiguration {
 export interface LinterOptions {
   /** Defaults to the bundled asset URL. */
   wasmUrl?: string;
+  /**
+   * Where to fetch the workflow JSON schema. Defaults to `schema.json` beside
+   * the wasm artifact, which is where `build:wasm` writes it.
+   */
+  schemaUrl?: string;
   trusted?: Partial<TrustedConfiguration>;
   privilegedPlugins?: string[];
   trustedClonePlugins?: string[];

@@ -1,0 +1,483 @@
+// Copyright 2026 Woodpecker Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+//go:build js && wasm
+
+// Command wasm exposes the pipeline frontend to JavaScript.
+//
+// It exists so that editors, documentation sites and configuration tools can
+// parse, lint, and simulate a workflow in a browser using the same code the
+// server runs. Any second implementation of `when` matching or DAG resolution
+// would drift from this one, and a tool that disagrees with the server about
+// what runs is worse than no tool.
+//
+// Everything crosses the boundary as a single JSON string in and a single JSON
+// string out. Traversing js.Value field by field is the main performance trap
+// in Go WASM, and one payload per call avoids it entirely.
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"syscall/js"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
+
+	backend_types "go.woodpecker-ci.org/woodpecker/v3/pipeline/backend/types"
+	pipeline_errors "go.woodpecker-ci.org/woodpecker/v3/pipeline/errors"
+	"go.woodpecker-ci.org/woodpecker/v3/pipeline/frontend/metadata"
+	yaml_frontend "go.woodpecker-ci.org/woodpecker/v3/pipeline/frontend/yaml"
+	"go.woodpecker-ci.org/woodpecker/v3/pipeline/frontend/yaml/compiler"
+	"go.woodpecker-ci.org/woodpecker/v3/pipeline/frontend/yaml/linter"
+	"go.woodpecker-ci.org/woodpecker/v3/pipeline/frontend/yaml/matrix"
+	yaml_types "go.woodpecker-ci.org/woodpecker/v3/pipeline/frontend/yaml/types"
+	"go.woodpecker-ci.org/woodpecker/v3/version"
+)
+
+// globalName is where the exported API is installed on globalThis.
+const globalName = "__woodpeckerPipeline"
+
+func init() {
+	// Logging is disabled outright, not redirected.
+	//
+	// A write to stderr from inside a synchronous exported call deadlocks the
+	// whole module: syscall.Write goes through an async fsCall that cannot
+	// complete while the js.Func callback is still on the stack, and the Go
+	// runtime reports "all goroutines are asleep". The frontend packages log at
+	// trace level during ordinary operation, for example when Environ filters
+	// an empty variable, so this is reachable on the happy path rather than
+	// only on errors.
+	zerolog.SetGlobalLevel(zerolog.Disabled)
+	log.Logger = zerolog.New(io.Discard)
+}
+
+type workflowFile struct {
+	Name string `json:"name"`
+	Data string `json:"data"`
+}
+
+type trustedConfiguration struct {
+	Network  bool `json:"network"`
+	Volumes  bool `json:"volumes"`
+	Security bool `json:"security"`
+}
+
+type lintRequest struct {
+	Files []workflowFile `json:"files"`
+	// Instance-specific configuration. A standalone caller cannot know these
+	// and should leave them at the upstream defaults, labelling any
+	// trust-related diagnostic as instance-dependent rather than absolute.
+	Trusted             trustedConfiguration `json:"trusted"`
+	PrivilegedPlugins   []string             `json:"privilegedPlugins"`
+	TrustedClonePlugins []string             `json:"trustedClonePlugins"`
+}
+
+type diagnostic struct {
+	Message  string `json:"message"`
+	Field    string `json:"field"`
+	File     string `json:"file"`
+	Severity string `json:"severity"`
+	Source   string `json:"source"`
+}
+
+type parseResult struct {
+	OK    bool   `json:"ok"`
+	Error string `json:"error,omitempty"`
+}
+
+type matchRequest struct {
+	Source   string            `json:"src"`
+	Metadata metadata.Metadata `json:"metadata"`
+	// One expanded matrix combination. Substitution happens against the
+	// metadata environment plus this axis, exactly as the server does per job.
+	Axis map[string]string `json:"axis"`
+}
+
+type matchResult struct {
+	Workflow bool            `json:"workflow"`
+	Steps    map[string]bool `json:"steps"`
+	// Workflow && step. Callers must use this: a step whose own `when` matches
+	// still does not run when the workflow gate excludes it, and showing the
+	// two separately misleads.
+	Effective map[string]bool `json:"effective"`
+	Error     string          `json:"error,omitempty"`
+}
+
+type stagesRequest struct {
+	Source   string            `json:"src"`
+	Metadata metadata.Metadata `json:"metadata"`
+	Axis     map[string]string `json:"axis"`
+}
+
+type stagesResult struct {
+	Mode string `json:"mode"`
+	// Parallel groups, in execution order.
+	Stages [][]string `json:"stages"`
+	// Steps the compiler adds that the user did not write, such as the clone.
+	Injected []string `json:"injected"`
+	Error    string   `json:"error,omitempty"`
+}
+
+type versionResult struct {
+	Woodpecker string `json:"woodpecker"`
+}
+
+// substitute expands ${VAR} against the metadata environment.
+//
+// The server does this before parsing, so a simulator that skips it disagrees
+// with the server about configs that use variables. A `when` block filtering on
+// ${CI_REPO_DEFAULT_BRANCH} matches nothing without it, which looks like a
+// broken config rather than a missing step.
+//
+// Lint deliberately does not substitute: it takes no metadata, and expanding
+// against an empty environment would blank out values and invent errors.
+func substitute(src string, md metadata.Metadata, axis map[string]string) (string, error) {
+	environ := md.Environ()
+	// Matrix values win, the same way the server builds one environment per job.
+	// Without them, `image: golang:${GO_VERSION}` expands to a trailing colon
+	// and the config stops being valid YAML at all.
+	for key, value := range axis {
+		environ[key] = value
+	}
+	return metadata.EnvVarSubst(src, environ)
+}
+
+// declaredSecrets collects every `from_secret` name in the config.
+//
+// The compiler resolves secrets while compiling and fails on an unknown one, so
+// stage resolution would be impossible in a browser, which has no secret
+// values. Names are enough: a value cannot change the shape of the graph.
+func declaredSecrets(workflow *yaml_types.Workflow) []compiler.Secret {
+	seen := map[string]struct{}{}
+	secrets := []compiler.Secret{}
+
+	var walk func(value any)
+	walk = func(value any) {
+		switch typed := value.(type) {
+		case map[string]any:
+			for key, nested := range typed {
+				if key == "from_secret" {
+					if name, ok := nested.(string); ok {
+						if _, exists := seen[name]; !exists {
+							seen[name] = struct{}{}
+							secrets = append(secrets, compiler.Secret{Name: name, Value: ""})
+						}
+					}
+					continue
+				}
+				walk(nested)
+			}
+		case []any:
+			for _, nested := range typed {
+				walk(nested)
+			}
+		}
+	}
+
+	for _, list := range []yaml_types.ContainerList{workflow.Steps, workflow.Services, workflow.Clone} {
+		for _, container := range list.ContainerList {
+			walk(map[string]any(container.Environment))
+			walk(map[string]any(container.Settings))
+		}
+	}
+
+	return secrets
+}
+
+func parseWorkflow(src string) (*yaml_types.Workflow, error) {
+	workflow, err := yaml_frontend.ParseString(src)
+	if err != nil {
+		return nil, err
+	}
+	if workflow == nil {
+		return nil, fmt.Errorf("configuration parsed to nothing")
+	}
+	return workflow, nil
+}
+
+func doParse(payload string) (any, error) {
+	if _, err := parseWorkflow(payload); err != nil {
+		return parseResult{OK: false, Error: err.Error()}, nil
+	}
+	return parseResult{OK: true}, nil
+}
+
+// errorData pulls the file and field out of whichever payload the error
+// carries. Upstream uses a different data struct per error type.
+func errorData(err *pipeline_errors.PipelineError) (file, field string) {
+	switch data := err.Data.(type) {
+	case *pipeline_errors.LinterErrorData:
+		return data.File, data.Field
+	case *pipeline_errors.DeprecationErrorData:
+		return data.File, data.Field
+	case *pipeline_errors.BadHabitErrorData:
+		return data.File, data.Field
+	}
+	return "", ""
+}
+
+func doLint(payload string) (any, error) {
+	var req lintRequest
+	if err := json.Unmarshal([]byte(payload), &req); err != nil {
+		return nil, err
+	}
+
+	diagnostics := []diagnostic{}
+	configs := make([]*linter.WorkflowConfig, 0, len(req.Files))
+
+	for _, file := range req.Files {
+		// Lint dereferences the parsed workflow without a nil check, so a
+		// config that failed to parse must never reach it.
+		workflow, err := parseWorkflow(file.Data)
+		if err != nil {
+			diagnostics = append(diagnostics, diagnostic{
+				Message:  err.Error(),
+				File:     file.Name,
+				Severity: "error",
+				Source:   "generic",
+			})
+			continue
+		}
+		configs = append(configs, &linter.WorkflowConfig{
+			File:      file.Name,
+			RawConfig: file.Data,
+			Workflow:  workflow,
+		})
+	}
+
+	if len(configs) == 0 {
+		return diagnostics, nil
+	}
+
+	err := linter.New(
+		linter.WithTrusted(linter.TrustedConfiguration{
+			Network:  req.Trusted.Network,
+			Volumes:  req.Trusted.Volumes,
+			Security: req.Trusted.Security,
+		}),
+		linter.PrivilegedPlugins(req.PrivilegedPlugins),
+		linter.WithTrustedClonePlugins(req.TrustedClonePlugins),
+	).Lint(configs)
+
+	for _, lintErr := range pipeline_errors.GetPipelineErrors(err) {
+		file, field := errorData(lintErr)
+		severity := "error"
+		if lintErr.IsWarning {
+			severity = "warning"
+		}
+		diagnostics = append(diagnostics, diagnostic{
+			Message:  lintErr.Message,
+			Field:    field,
+			File:     file,
+			Severity: severity,
+			Source:   string(lintErr.Type),
+		})
+	}
+
+	return diagnostics, nil
+}
+
+func doMatch(payload string) (any, error) {
+	var req matchRequest
+	if err := json.Unmarshal([]byte(payload), &req); err != nil {
+		return nil, err
+	}
+
+	source, err := substitute(req.Source, req.Metadata, req.Axis)
+	if err != nil {
+		return matchResult{Steps: map[string]bool{}, Effective: map[string]bool{}, Error: err.Error()}, nil
+	}
+
+	workflow, err := parseWorkflow(source)
+	if err != nil {
+		return matchResult{Steps: map[string]bool{}, Effective: map[string]bool{}, Error: err.Error()}, nil
+	}
+
+	env := req.Metadata.Environ()
+
+	// The workflow gate is global, the step gates are not.
+	workflowMatch, err := workflow.When.Match(req.Metadata, true, env)
+	if err != nil {
+		return matchResult{Steps: map[string]bool{}, Effective: map[string]bool{}, Error: err.Error()}, nil
+	}
+
+	steps := map[string]bool{}
+	effective := map[string]bool{}
+	for _, container := range workflow.Steps.ContainerList {
+		stepMatch, err := container.When.Match(req.Metadata, false, env)
+		if err != nil {
+			return matchResult{Steps: steps, Effective: effective, Error: err.Error()}, nil
+		}
+		steps[container.Name] = stepMatch
+		effective[container.Name] = workflowMatch && stepMatch
+	}
+
+	return matchResult{Workflow: workflowMatch, Steps: steps, Effective: effective}, nil
+}
+
+func doMatrix(payload string) (any, error) {
+	axes, err := matrix.ParseString(payload)
+	if err != nil {
+		return nil, err
+	}
+	if axes == nil {
+		axes = []matrix.Axis{}
+	}
+	return axes, nil
+}
+
+// isDAG mirrors the rule in compiler/dag.go: any step carrying a non-nil
+// depends_on switches the whole workflow to DAG mode. An absent depends_on is
+// nil, while an empty list is not, so `depends_on: []` flips the mode for every
+// step even though it looks like nothing.
+func isDAG(workflow *yaml_types.Workflow) bool {
+	for _, container := range workflow.Steps.ContainerList {
+		if !container.DependsOn.IsZero() {
+			return true
+		}
+	}
+	return false
+}
+
+func stageNames(config *backend_types.Config) [][]string {
+	stages := make([][]string, 0, len(config.Stages))
+	for _, stage := range config.Stages {
+		names := make([]string, 0, len(stage.Steps))
+		for _, step := range stage.Steps {
+			names = append(names, step.Name)
+		}
+		stages = append(stages, names)
+	}
+	return stages
+}
+
+func doStages(payload string) (any, error) {
+	var req stagesRequest
+	if err := json.Unmarshal([]byte(payload), &req); err != nil {
+		return nil, err
+	}
+
+	source, err := substitute(req.Source, req.Metadata, req.Axis)
+	if err != nil {
+		return stagesResult{Mode: "sequential", Stages: [][]string{}, Injected: []string{}, Error: err.Error()}, nil
+	}
+
+	workflow, err := parseWorkflow(source)
+	if err != nil {
+		return stagesResult{Mode: "sequential", Stages: [][]string{}, Injected: []string{}, Error: err.Error()}, nil
+	}
+
+	mode := "sequential"
+	if isDAG(workflow) {
+		mode = "dag"
+	}
+
+	config, err := compiler.New(
+		compiler.WithMetadata(req.Metadata),
+		compiler.WithSecret(declaredSecrets(workflow)...),
+	).Compile(workflow)
+	if err != nil {
+		return stagesResult{Mode: mode, Stages: [][]string{}, Injected: []string{}, Error: err.Error()}, nil
+	}
+
+	authored := map[string]struct{}{}
+	for _, container := range workflow.Steps.ContainerList {
+		authored[container.Name] = struct{}{}
+	}
+	for _, container := range workflow.Services.ContainerList {
+		authored[container.Name] = struct{}{}
+	}
+	for _, container := range workflow.Clone.ContainerList {
+		authored[container.Name] = struct{}{}
+	}
+
+	stages := stageNames(config)
+	injected := []string{}
+	for _, stage := range stages {
+		for _, name := range stage {
+			if _, ok := authored[name]; !ok {
+				injected = append(injected, name)
+			}
+		}
+	}
+
+	return stagesResult{Mode: mode, Stages: stages, Injected: injected}, nil
+}
+
+func doVersion(string) (any, error) {
+	return versionResult{Woodpecker: version.String()}, nil
+}
+
+func marshal(value any) string {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		// The only way to report a marshalling failure is as a payload.
+		return fmt.Sprintf("{%q:%q}", "error", err.Error())
+	}
+	return string(encoded)
+}
+
+// expose wraps a handler so that no Go panic and no Go error can cross the
+// boundary as anything but a JSON payload. A panic escaping into JavaScript
+// takes down the whole module, which would turn one malformed config into a
+// dead editor.
+func expose(name string, handler func(string) (any, error)) js.Func {
+	return js.FuncOf(func(_ js.Value, args []js.Value) (result any) {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				result = marshal(map[string]string{
+					"error": fmt.Sprintf("%s panicked: %v", name, recovered),
+				})
+			}
+		}()
+
+		payload := ""
+		if len(args) > 0 && args[0].Type() == js.TypeString {
+			payload = args[0].String()
+		}
+
+		value, err := handler(payload)
+		if err != nil {
+			return marshal(map[string]string{"error": err.Error()})
+		}
+		return marshal(value)
+	})
+}
+
+func main() {
+	done := make(chan struct{})
+
+	api := map[string]any{
+		"parse":   expose("parse", doParse),
+		"lint":    expose("lint", doLint),
+		"match":   expose("match", doMatch),
+		"matrix":  expose("matrix", doMatrix),
+		"stages":  expose("stages", doStages),
+		"version": expose("version", doVersion),
+		"dispose": js.FuncOf(func(_ js.Value, _ []js.Value) any {
+			select {
+			case <-done:
+			default:
+				close(done)
+			}
+			return nil
+		}),
+	}
+
+	js.Global().Set(globalName, js.ValueOf(api))
+
+	<-done
+}
