@@ -1,0 +1,31 @@
+{
+  "name": "@woodpecker-ci/pipeline-wasm",
+  "version": "3.16.0-0",
+  "description": "Woodpecker CI pipeline frontend (parse, lint, when-matching, matrix, stages) compiled to WebAssembly, wrapped for JavaScript.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./sync": {
+      "types": "./dist/sync.d.ts",
+      "default": "./dist/sync.js"
+    },
+    "./woodpecker.wasm": "./dist/woodpecker.wasm"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "build:wasm": "./scripts/build-wasm.sh",
+    "typecheck": "tsc -b --noEmit false --emitDeclarationOnly",
+    "test": "vitest run --passWithNoTests"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
