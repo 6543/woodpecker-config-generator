@@ -9,8 +9,26 @@ export default defineConfig({
   base: './',
   plugins: [vue(), tailwindcss()],
   resolve: {
+    // Workspace packages resolve through their `exports` to `dist`, which only
+    // exists after a package build, so a bare `vite dev` fails to resolve them.
+    // Point them at source instead, exactly as vitest.config.ts does, so the
+    // dev server and the standalone build work without a prior package build
+    // and pick up edits without one. The WASM asset is not resolved through the
+    // package: useEngine passes an explicit `wasmUrl` served from the app base.
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
+      '@woodpecker-ci/pipeline-wasm/sync': fileURLToPath(
+        new URL('../../packages/pipeline-wasm/src/sync.ts', import.meta.url),
+      ),
+      '@woodpecker-ci/pipeline-wasm': fileURLToPath(
+        new URL('../../packages/pipeline-wasm/src/index.ts', import.meta.url),
+      ),
+      '@woodpecker-ci/config-core': fileURLToPath(
+        new URL('../../packages/core/src/index.ts', import.meta.url),
+      ),
+      '@woodpecker-ci/plugin-schema': fileURLToPath(
+        new URL('../../packages/plugin-schema/src/index.ts', import.meta.url),
+      ),
     },
   },
   build: {
