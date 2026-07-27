@@ -1,0 +1,22 @@
+# Checks documentaton with pydocstyle and then builds it.
+#
+# Note that it does not publish it, just checks you can build it.
+#
+# See test.yaml for more information.
+
+when:
+  - event: pull_request
+  - event: push
+    branch: ${CI_REPO_DEFAULT_BRANCH}
+
+steps:
+  - name: docs
+    image: python:latest
+    commands:
+      - pip install pydocstyle mkdocs mkdocs-material
+      - pydocstyle --verbose --count
+      - mkdocs build -s
+depends_on:
+  - security
+  - lint
+  - mypy

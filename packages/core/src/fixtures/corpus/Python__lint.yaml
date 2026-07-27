@@ -1,0 +1,17 @@
+# Simple linting with the latest version of ruff.
+#
+# See test.yaml for more information.
+
+when:
+  - event: pull_request
+  - event: push
+    branch: ${CI_REPO_DEFAULT_BRANCH}
+
+steps:
+  - name: lint
+    image: python:latest
+    commands:
+      - pip install ruff
+      - ruff check src tests
+depends_on:
+  - security

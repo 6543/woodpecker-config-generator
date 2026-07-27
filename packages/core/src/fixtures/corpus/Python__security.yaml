@@ -1,0 +1,33 @@
+# Runs bandit and Trivy to make sure you don't have security issues.
+#
+# See test.yaml for more information.
+#
+# For critical projects, this should be run once per day via cron.
+# For less than critical projects, once per week should do just fine.
+# See https://woodpecker-ci.org/docs/usage/cron
+#
+# CRON:
+#
+# For this to work, you need to setup woodpecker so that it calls your cron job.
+# You can do this via the UI. You can run it monthly, weekly, or daily depending
+# on your needs — weekly is probably fine for most projects.
+#
+# More information here:
+#   https://woodpecker-ci.org/docs/usage/cron#add-a-new-cron-job
+when:
+  - event: pull_request
+  - event: push
+    branch: ${CI_REPO_DEFAULT_BRANCH}
+  - event: cron
+    cron: 'Security run' # See note above!
+
+steps:
+  - name: bandit
+    image: python:latest
+    commands:
+      - pip install bandit
+      - bandit --verbose --recursive src
+  - name: trivy
+    image: aquasec/trivy:latest
+    commands:
+      - trivy fs --scanners vuln,secret,misconfig --dependency-tree --include-dev-deps .

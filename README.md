@@ -8,8 +8,9 @@ Monorepo for three deliverables described in the pre-RFC spec:
    tables (`woodpecker-plugin-settings v1`).
 3. A standalone webapp that builds a `.woodpecker.yaml` and shows what would run.
 
-**Status: scaffold.** Structure, types, tooling and CI are in place. Every
-function body throws `NotImplementedError`. No pipeline logic is wired up yet.
+**Status: partial.** `plugin-schema` and the AST half of `core` are implemented
+and tested. The WASM wrapper, the prose generator, the setup checklist, the state
+codec and the app are still stubs that throw `NotImplementedError`.
 
 ## Layout
 

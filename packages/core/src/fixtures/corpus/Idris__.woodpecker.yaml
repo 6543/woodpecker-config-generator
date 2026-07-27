@@ -1,0 +1,7 @@
+steps:
+  build:
+    image: snazzybucket/idris2
+    commands: idris2 --typecheck --mkdoc
+    when:
+      event: push
+      branch: ${CI_REPO_DEFAULT_BRANCH}

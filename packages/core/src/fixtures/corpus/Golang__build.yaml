@@ -1,0 +1,10 @@
+steps:
+  build:
+    when:
+      event: [push, pull_request]
+    image: golang
+    commands:
+      - go get
+      - go build
+      # Optional: Run go tests
+      - go test

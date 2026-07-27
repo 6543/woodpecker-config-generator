@@ -1,0 +1,25 @@
+# Image: https://coderberg.org/native-ci/cpp-meson
+#
+# Meson (https://www.mesonbuild.com) provides builds for C, C++, etc.
+# It typically generates ninja (https://ninja-build.org/) files.
+#
+# As native code dependencies may need to be installed via Conan
+# (https://conan.io/), it is also included in the image (usage
+# not in this example).
+#
+# Includes GCC and clang
+
+steps:
+  build:
+    image: codeberg.org/native-ci/cpp-meson:latest
+    # this step gets run on "master" and "dev" branches.
+    # also runs on pull requests targeting these branches.
+    when:
+      branch:
+        - ${CI_REPO_DEFAULT_BRANCH}
+        - dev
+      event: [push, pull_request]
+    commands: |
+      mkdir build && cd build
+      meson ..
+      ninja -v

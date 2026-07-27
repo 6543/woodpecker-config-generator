@@ -1,0 +1,28 @@
+# Image: https://coderberg.org/native-ci/android-ndk
+#
+# See meson.yml - the main difference is that this uses a different image that
+# includes an Android NDK installation as well as cross compilation profiles
+# for the NDK's platforms.
+#
+# The cross compilation files for meson includes a `sys_root` property that you
+# may need to pass on to the compiler.
+
+steps:
+  build:
+    image: codeberg.org/native-ci/android-ndk:latest
+    # this step gets run on "master" and "dev" branches.
+    # also runs on pull requests targeting these branches.
+    when:
+      branch:
+        - ${CI_REPO_DEFAULT_BRANCH}
+        - dev
+      event: [push, pull_request]
+    commands: |
+      # Possible profiles:
+      #   android-arm64-v8a.txt
+      #   android-armeabi-v7a.txt
+      #   android-x86_64.txt
+      #   android-x86.txt
+      mkdir build && cd build
+      meson --cross-file android-arm64-v8a.txt ..
+      ninja -v

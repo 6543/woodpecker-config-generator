@@ -1,0 +1,65 @@
+# Builds a Typst file and pushes the resulting PDF file to a given repository.
+#
+# In the following examples, it will be assumed that you want to build
+# "docs/report.typ" and push it as "archive/project.pdf" to your "pages"
+# Codeberg repository.
+#
+# Environment variables to be set at every step (variables shared between steps
+# are not supported):
+# - TYPST_FOLDER: the folder of the .typ file to build (e.g. "docs");
+# - TYPST_FILENAME: the filename (without file extension) of the .typ file to
+#                 build (e.g. "report");
+# - OUT_REPO_NAME: the name of the repository to push the PDF to (e.g. "pages");
+# - PDF_FOLDER: the folder where the PDF will be pushed (e.g. "archive");
+# - PDF_FILENAME: the filename (without file extension) of the resulting PDF
+#                 document (e.g. "project").
+# Trailing slashes for folders are not necessary.
+#
+# Secrets to set up:
+# - CBTOKEN: an Access Tokens generated from your Codeberg profile;
+# - CBMAIL: an email address to author the commit containing the PDF file.
+
+steps:
+  build:
+    when:
+      event: [push, pull_request]
+    image: 123marvin123/typst
+    environment:
+      TYPST_FOLDER: docs
+      TYPST_FILENAME: report
+    commands:
+      - typst $TYPST_FOLDER/$TYPST_FILENAME.typ
+  deploy:
+    image: alpine/git
+    environment:
+      TYPST_FOLDER: docs
+      TYPST_FILENAME: report
+      OUT_REPO_NAME: pages
+      PDF_FOLDER: archive
+      PDF_FILENAME: project
+      # secrets must be set in Woodpecker configuration
+      CBTOKEN:
+        from_secret: cbtoken
+      CBMAIL:
+        from_secret: cbmail
+    commands:
+      # Avoid permission denied errors
+      - chmod -R a+w .
+      # Set up git in a working way
+      - git config --global --add safe.directory /woodpecker/src/codeberg.org/$CI_REPO_OWNER/$CI_REPO_NAME/_site
+      - git config --global user.email "$CBMAIL"
+      - git config --global user.name "CI Builder"
+      # Clone and move the target repo
+      - git clone https://codeberg.org/$CI_REPO_OWNER/$OUT_REPO_NAME.git _site
+      - chmod -R a+w _site
+      - cd _site
+      - mkdir -p $PDF_FOLDER
+      - mv ../$TYPST_FOLDER/$TYPST_FILENAME.pdf $PDF_FOLDER/$PDF_FILENAME.pdf
+      # Push
+      - git remote set-url origin https://$CBTOKEN@codeberg.org/$CI_REPO_OWNER/$OUT_REPO_NAME.git
+      - git add $PDF_FOLDER/$PDF_FILENAME.pdf
+      - git commit -m "Woodpecker CI Typst Build at $( env TZ=Europe/Berlin date + "%Y-%m-%d %X %Z" )"
+      - git push
+    when:
+      branch: ${CI_REPO_DEFAULT_BRANCH}
+      event: [push, pull_request]

@@ -1,0 +1,51 @@
+# build pdoc documentation into /public
+# push content of /public to EXISTING pages branch
+
+when:
+  branch: ${CI_REPO_DEFAULT_BRANCH}
+  event: push
+
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      recursive: true
+
+steps:
+  build:
+    image: python:3.9-buster
+    commands:
+      - python -m venv venv
+      - /bin/bash -c "source venv/bin/activate"
+      - python -m pip install --upgrade pip
+      # install requirements from your source code (needed by pdoc)
+      - python -m pip install --upgrade -r requirements.txt
+      - python -m pip install pdoc
+      # locate the part of your code to be documented
+      - pdoc <my_python_module_or_file> -o public # test locally
+
+  publish:
+    image: alpine/git
+    environment:
+      # secrets must be set in Woodpecker configuration
+      CBTOKEN:
+        from_secret: cbtoken
+    commands:
+      # config git to commit and push changes
+      - git config --global --add safe.directory $CI_WORKSPACE/public
+      - git config --global user.email "woodpecker-bot@no-reply.eu"
+      - git config --global user.name "woodpecker-bot"
+      - git config --global init.defaultBranch pages
+      # clone the existing pages branch which will be updated with new pdoc build
+      - git clone -b pages https://$CBTOKEN@codeberg.org/<user_name>/<repo_name>.git build_pdocs
+      # purge existing docs
+      - rm -rf build_pdocs/*
+      # add new docs
+      - cp -a public/* build_pdocs/
+      # commit and push to pages branch
+      - cd build_pdocs/
+      - git remote set-url origin https://$CBTOKEN@codeberg.org/<user_name>/<repo_name>.git
+      - git add --all
+      # exclude current push from CI pipeline triggering
+      - git commit -m "deploy $CI_COMMIT_SHA [CI SKIP]"
+      - git push -u origin pages

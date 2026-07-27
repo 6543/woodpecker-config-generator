@@ -1,0 +1,50 @@
+when:
+  event: [pull_request]
+
+steps:
+  editor-config:
+    image: mstruebing/editorconfig-checker:v3.8.0@sha256:eb478136c4342af399bb90537319722a7da289b8a7a8d2471592e3d7a5f5bfa7
+    depends_on: []
+
+  woodpecker-cli:
+    depends_on: []
+    image: woodpeckerci/woodpecker-cli:v3.16.0-alpine@sha256:944f4ade59f10470114609191c5c9d11b5c278c1582c538d213f4ffe67370f46
+    environment:
+      WOODPECKER_PLUGINS_PRIVILEGED: docker.io/woodpeckerci/plugin-docker-buildx
+    commands:
+      - |
+        for dir in */; do
+          # Skip hidden directories
+          case "$dir" in
+            .*) continue ;;
+          esac
+          echo "Linting $dir"
+          # workaround for https://github.com/woodpecker-ci/woodpecker/issues/6120
+          if [ -d "$dir.woodpecker" ]; then
+            woodpecker-cli lint "$dir.woodpecker"
+          else
+            if [ -f "$dir.woodpecker.yaml" ]; then
+              woodpecker-cli lint "$dir.woodpecker.yaml"
+            else
+              woodpecker-cli lint "$dir"
+            fi
+          fi
+        done
+
+  yamllint:
+    depends_on: []
+    image: cytopia/yamllint:alpine-1@sha256:4fb4e065d5c1382622393b055d59cee5ba238c15aba0b063fa3b55d21b7face8
+    commands:
+      - yamllint --strict -c=.yamllint.yaml .
+
+  link-checker:
+    image: lycheeverse/lychee:0.24.2@sha256:e2d19e57cf6ab037026f20b8e449a1f30d9d7f81eef4194763aab2eab20bd28d
+    depends_on: []
+    commands:
+      - lychee .
+
+  prettier:
+    image: docker.io/woodpeckerci/plugin-prettier:1.4.1@sha256:ae8662a0ee7fab6cf70b6ba9a85ec6e83b9857db435a17ce1ec8c53dfde0b959
+    depends_on: []
+    settings:
+      version: 3.2.5

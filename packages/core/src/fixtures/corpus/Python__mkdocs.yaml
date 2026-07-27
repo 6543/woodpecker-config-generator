@@ -1,0 +1,27 @@
+# build and deploy mkdocs to codeberg pages
+# This assumes your code lives in one repo, and you have a <owner>/pages
+# repo which will be used to host the built pages.
+
+steps:
+  build-docs:
+    when:
+      event: [push, pull_request]
+    # build the docs with mkdocs and add the .domains file for codeberg pages
+    image: squidfunk/mkdocs-material
+    commands:
+      - mkdocs build
+      - echo -e '<yourtld.com>\n<codeberg_username>.codeberg.page\npages.<codeberg_username>.codeberg.page' > site/.domains
+
+  deploy-docs:
+    when:
+      event: [push, pull_request]
+    image: codeberg.org/sugar700/plugin-codeberg-pages-deploy:1
+    settings:
+      folder: site
+      repository_name: <codeberg_org>/pages
+      branch: ${CI_REPO_DEFAULT_BRANCH}
+      ssh_key:
+        # created using woodpecker cli with:
+        # woodpecker secret add -repository <org>/<repo> \
+        # -name codeberg_push_from_ci_priv_key -value @<path_to_privkey_file>
+        from_secret: codeberg_push_from_ci_priv_key

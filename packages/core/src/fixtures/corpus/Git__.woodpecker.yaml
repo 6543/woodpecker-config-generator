@@ -1,0 +1,38 @@
+# Git/.woodpecker.yaml
+#
+# CI step to automatic synchronization with an upstream repository.
+#
+# [drone-git-push](https://github.com/appleboy/drone-git-push)
+
+when:
+  event: [cron, manual]
+  cron: 'sync'
+
+clone:
+  - name: clone
+    image: docker.io/woodpeckerci/plugin-git
+    settings:
+      # Disable partial to avoid `shallow update not allowed`
+      partial: false
+
+steps:
+  - name: sync
+    image: docker.io/alpine/git
+    commands:
+      - git remote add upstream https://codeberg.org/<UPSTREAM_REPO>
+      - git fetch upstream
+      - git merge upstream/HEAD
+
+  - name: push
+    # for more information about plugin settings, please refer to
+    # https://github.com/appleboy/drone-git-push/blob/master/DOCS.md
+    image: docker.io/appleboy/drone-git-push:latest
+    settings:
+      ssh_key:
+        from_secret: ssh_key
+      remote: git@codeberg.org:<YOUR_REPO>.git
+      branch: ${CI_REPO_DEFAULT_BRANCH}
+      commit: true
+      # force: boolean, force push using the `--force` flag, defaults to false
+      # commit_message: add a custom message for commit, if it is omitted, it will be `[skip ci] Commit dirty state`
+      # empty_commit: boolean, if you only want generate an empty commit, you can do it using this option

@@ -1,0 +1,30 @@
+# Build and publish Docker images to multiple registries.
+#
+# The `logins` map is used to login to multiple registries, here codeberg.org and AWS ECR
+# The `repo` setting holds the repo names in the same order as the registries are defined in `logins`
+
+when:
+  branch: ${CI_REPO_DEFAULT_BRANCH}
+  event: [push, pull_request]
+
+steps:
+  publish:
+    image: docker.io/woodpeckerci/plugin-docker-buildx:latest
+    settings:
+      repo: 6543/tmp,codeberg.org/6543/tmp,<account-id>.dkr.ecr.<region>.amazonaws.com/6543/tmp
+      tag: demo
+      logins:
+        - registry: https://index.docker.io/v1/
+          username: a6543
+          password:
+            from_secret: docker_token
+        - registry: https://codeberg.org
+          username: '6543'
+          password:
+            from_secret: cb_token
+        - registry: https://<account-id>.dkr.ecr.<region>.amazonaws.com
+          aws_region: <region>
+          aws_access_key_id:
+            from_secret: aws_access_key_id
+          aws_secret_access_key:
+            from_secret: aws_secret_access_key

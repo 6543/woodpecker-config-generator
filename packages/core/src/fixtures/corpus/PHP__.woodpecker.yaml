@@ -1,0 +1,19 @@
+# PHP Lint on recent (supported) versions.
+# Will exit with exit code 1 when 'php -l <file>' failes.
+# Recursive lint snippet taken fron the gist comments over at https://gist.github.com/mathiasverraes/3096500
+
+matrix:
+  PHPVERSION:
+    - 8.0
+    - 8.1
+    - 8.2
+    - 8.3
+steps:
+  lint:
+    image: php:${PHPVERSION}-cli
+    commands:
+      - find . -path ./app/vendor -prune -o -type f -name '*.php' -print0 | xargs -0 -n1 -P4 php -l -n | (! grep -v "No syntax errors detected" )
+    when:
+      - event: pull_request
+      - event: [push, tag, manual]
+        branch: ${CI_REPO_DEFAULT_BRANCH}

@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2019 Free Software Foundation Europe e.V.
+# SPDX-FileCopyrightText: 2024 Thiago Masato Costa Sueto <thiago.sueto@kde.org>
+# SPDX-License-Identifier: CC-BY-SA-4.0
+steps:
+  lint:
+    image: fsfe/reuse
+    when:
+      branch: ${CI_REPO_DEFAULT_BRANCH}
+      event: [push, pull_request]
+    commands: |
+      reuse lint

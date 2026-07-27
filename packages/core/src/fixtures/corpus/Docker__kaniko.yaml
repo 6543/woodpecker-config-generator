@@ -1,0 +1,19 @@
+# Pushes a Docker image without needing access to the Docker daemon
+#
+# Pushing an image to a container registry authenticated:
+#   DOCKER_USERNAME - Woodpecker CI Secret which is the container registry username
+#   DOCKER_PASSWORD - Woodpecker CI Secret which is container registry password
+
+steps:
+  publish-docker-image:
+    when:
+      event: [push, pull_request]
+    image: plugins/kaniko
+    settings:
+      repo: sample/image
+      tags: latest,v1-${CI_COMMIT_SHA:0:8}
+      dockerfile: Dockerfile
+      username:
+        from_secret: docker_username
+      password:
+        from_secret: docker_password

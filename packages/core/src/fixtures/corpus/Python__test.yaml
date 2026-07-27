@@ -1,0 +1,62 @@
+# Runs all the unit test with coverage and generates a report.
+#
+# Note that
+#
+#   1. This runs only after security, lint, mypy and docs checks have passed.
+#     a. Security runs bandit.
+#     b. Lint runs ruff.
+#     c. Mypy runs mypy, for typ4e hints.
+#     d. Docs runs pydocstyle and mkdocs — with the material theme since it's the one I use.
+#   2. This uses uv to generate a requirements.txt file.
+#   3. I run from Python 3.10 to 3.13.
+#   4. 3.14 is still in development, but you could add it, and make sure the test failure is none-blocking.
+#   5. I have no idea how to get the coverage report so Woodpeck/Codeberg can display it.
+#
+#   Note that for the coverage reporting, you need a secret with Push and Pull Request permissions called
+#   PYNPC_COVERAGE_COMMENT_TOKEN. The messages will appear as if they come from your user and not a bot.
+#
+#   You get a report per Python version — the version is in the title. This is maybe overkill.
+#   If you can figure out how to just do it for the latest version, please edit this code and submit a PR.
+
+steps:
+  - name: test and coverage
+    image: python:${TAG}
+    commands:
+      - pip install uv
+      # uv normally installs in the venv, but I could not work out how to activate it. Therefore, I used this work around.
+      - uv export --format requirements.txt > requirements.txt
+      - uv pip install --system -r requirements.txt
+      # Running coverage with pytest and generates a report.
+      - coverage run --concurrency=thread -m pytest --doctest-modules --slow
+      - coverage combine
+      # This makes sure the next step can upload the report.
+      - echo "# Python ${TAG} coverage report\n\n" > coverage-${TAG}.md
+      - coverage report --format=markdown >> coverage-${TAG}.md
+    when:
+      - event: pull_request
+      - event: push
+        branch: ${CI_REPO_DEFAULT_BRANCH}
+  - name: Unit test coverage reporting
+    image: codeberg.org/bulgakov/gitea-comment
+    settings:
+      gitea_address: https://codeberg.org
+      gitea_token:
+        from_secret: PYNPC_COVERAGE_COMMENT_TOKEN
+      comment_file: coverage-${TAG}.md
+    when:
+      # This only happens on pull requests, not merges to main.
+      - event: pull_request
+
+matrix:
+  TAG:
+    - 3.10
+    - 3.11
+    - 3.12
+    - 3.13
+
+depends_on:
+  # See files of the same name here.
+  - security
+  - lint
+  - mypy
+  - docs

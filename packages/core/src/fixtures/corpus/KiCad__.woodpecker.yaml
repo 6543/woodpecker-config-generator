@@ -1,0 +1,51 @@
+# KiCad projects on Codeberg
+#
+# Copy this into your .woodpecker directory, or place it into the root
+# directory of your repository and call it .woodpecker.yml
+#
+# This uses [KiBot](https://github.com/INTI-CMNB/KiBot/) to automate a
+# lot of things surrounding electronics projects in KiCad
+#
+# In this example, I'm assuming you want to generate gerber files
+# and a schematic PDF automatically on each push, but KiBot has a vast
+# number of options that you can look into!
+#
+# We will store the files as a single zip file in the "packages" section
+# of your project. For this to work, you will need to add two secrets:
+# - codeberg_user should contain your username, the way it is used to log in
+# - codeberg_token is created in your codeberg account settings and can then
+#   be copied to the woodpecker secrets. It gives the CI system access to
+#   your account (we need this to post to "packages")
+#
+# Packages will show up in your project after you go to your personal packages
+# page https://codeberg.org/<your username>/-/packages and associate the
+# newly created package with your project. This only has to be done once.
+#
+# The included `config.kibot.yaml` file is an example KiBot config file, not
+# a woodpecker file. Look at the KiBot documentation liked to above to add
+# your own tweaks
+
+steps:
+  # kibot creates the files
+  kibot:
+    when:
+      event: [push, pull_request]
+    image: ghcr.io/inti-cmnb/kicad7_auto_full:latest
+    commands:
+      # you just need to run "kibot". If your pcb is in a
+      # subdirectory, you can simply `cd` into it here, first.
+      - cd codeberg-kicad-kibot-example
+      - kibot
+
+  # gitea package stores the resulting file as a package
+  artifacts:
+    when:
+      event: [push, pull_request]
+    image: gurken2108/drone-gitea-package
+    settings:
+      user:
+        from_secret: codeberg_user
+      token:
+        from_secret: codeberg_token
+      # the resulting file will be called like your project is called.
+      file: codeberg-kicad-kibot-example/kibot/codeberg-kicad-kibot-example-production-files.zip

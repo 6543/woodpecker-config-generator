@@ -1,0 +1,33 @@
+# butane.yaml
+#
+# Use a bash script to translate the Butane configs in the current directory to
+# the Ignition configs, and push them to the master branch.
+#
+# [Butane](https://coreos.github.io/butane/)
+# [Ignition](https://coreos.github.io/ignition/)
+#
+# [drone-git-push](https://github.com/appleboy/drone-git-push)
+
+when:
+  branch: ${CI_REPO_DEFAULT_BRANCH}
+  event: [push, pull_request]
+
+steps:
+  - name: build
+    image: quay.io/coreos/butane:release
+    commands:
+      - bash ./script.sh
+
+  - name: push
+    # for more information about plugin settings, please refer to
+    # https://github.com/appleboy/drone-git-push/blob/master/DOCS.md
+    image: docker.io/appleboy/drone-git-push
+    settings:
+      ssh_key:
+        from_secret: ssh_key
+      remote: git@codeberg.org:<YOUR_GIT_REPO>.git
+      branch: ${CI_REPO_DEFAULT_BRANCH}
+      commit: true
+      # force: boolean, force push using the `--force` flag, defaults to false
+      # commit_message: add a custom message for commit, if it is omitted, it will be `[skip ci] Commit dirty state`
+      # empty_commit: boolean, if you only want generate an empty commit, you can do it using this option

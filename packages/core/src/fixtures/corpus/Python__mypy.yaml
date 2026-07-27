@@ -1,0 +1,22 @@
+# Check type hints wiht mypy.
+#
+# See test.yaml for more information.
+
+when:
+  - event: pull_request
+  - event: push
+    branch: ${CI_REPO_DEFAULT_BRANCH}
+
+steps:
+  - name: mypy
+    image: python:latest
+    commands:
+      - pip install uv
+      # uv normally installs in a venv, but I could not work out how to activate it. Therefore, I used this work around.
+      - uv export --format requirements.txt > requirements.txt
+      - uv pip install --system -r requirements.txt
+      # This needs all the dependencies since they include type hints.
+      - mypy src
+depends_on:
+  - security
+  - lint

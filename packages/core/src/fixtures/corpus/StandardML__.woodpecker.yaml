@@ -1,0 +1,14 @@
+# sml.yml
+#
+# Checks all .sml files in a given directory.
+
+steps:
+  check:
+    image: eldesh/smlnj
+    environment:
+      SML_FOLDER: src
+    commands:
+      - find $SML_FOLDER -name *.sml | xargs sml
+    when:
+      event: push
+      branch: ${CI_REPO_DEFAULT_BRANCH}

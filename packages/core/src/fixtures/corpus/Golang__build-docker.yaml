@@ -1,0 +1,65 @@
+steps:
+  # Builds your Go application
+  build:
+    when:
+      event: [push, pull_request]
+    image: golang
+    environment:
+      # Needed if you want to cross-compile and package the binary in a container.
+      CGO_ENABLED: 0
+      # Select your target OS:
+      GOOS: linux
+      # Select your target architecture:
+      GOARCH: amd64
+    commands:
+      - go get
+      - go build
+
+  # Runs a dryrun to build the docker container
+  dryrun-docker:
+    when:
+      event: [push, pull_request]
+    image: plugins/kaniko
+    settings:
+      repo: DOCKERUSERNAME/DOCKERHUBREPO
+      tags: test
+      dockerfile: Dockerfile
+      # Just builds the container without a push to DockerHub.
+      no_push: true
+
+  # Builds and publishes a docker container to DockerHub from the main-branch
+  publish-docker-latest:
+    when:
+      branch: ${CI_REPO_DEFAULT_BRANCH}
+      event: [push]
+    image: plugins/kaniko
+    settings:
+      repo: DOCKERUSERNAME/DOCKERHUBREPO
+      tags: latest
+      dockerfile: Dockerfile
+      username:
+        # Secret 'docker_username' needs to be set in the CI settings
+        from_secret: docker_username
+      password:
+        # Secret 'docker_password' needs to be set in the CI settings
+        from_secret: docker_password
+
+  # Builds and publishes a docker container of a tag
+  publish-docker-tag:
+    when:
+      # Push new version when version tag is created
+      event: tag
+      ref: refs/tags/v*
+      branch: ${CI_REPO_DEFAULT_BRANCH}
+    image: plugins/kaniko
+    settings:
+      repo: DOCKERUSERNAME/DOCKERHUBREPO
+      # Uses the tag from git for the container tag
+      tags: ${CI_COMMIT_TAG}
+      dockerfile: Dockerfile
+      username:
+        # Secret 'docker_username' needs to be set in the CI settings
+        from_secret: docker_username
+      password:
+        # Secret 'docker_password' needs to be set in the CI settings
+        from_secret: docker_password
