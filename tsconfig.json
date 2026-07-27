@@ -1,0 +1,9 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/pipeline-wasm" },
+    { "path": "./packages/plugin-schema" },
+    { "path": "./packages/core" },
+    { "path": "./apps/generator" }
+  ]
+}

@@ -1,0 +1,9 @@
+packages:
+  - packages/*
+  - apps/*
+minimumReleaseAgeExclude:
+  - '@intlify/core-base@11.4.8'
+  - '@intlify/devtools-types@11.4.8'
+  - '@intlify/message-compiler@11.4.8'
+  - '@intlify/shared@11.4.8'
+  - vue-i18n@11.4.8

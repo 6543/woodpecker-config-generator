@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.vite/
+.DS_Store
+# built WASM artifact, produced from an upstream checkout, never committed
+packages/pipeline-wasm/dist/*.wasm
+packages/pipeline-wasm/vendor/
